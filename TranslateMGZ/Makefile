@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Wall -std=c99
+CFLAGS=-Wall
 LDFLAGS= -static
 SOURCES= main.c
 EXECUTABLE=TranslateMGZ
