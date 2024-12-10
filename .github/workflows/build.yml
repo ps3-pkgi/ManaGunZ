@@ -5,14 +5,14 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     container:
-      image: debian:bullseye
+      image: debian:bookworm
     defaults:
         run:
           shell: bash
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Install build dependencies
       run: ./.github/scripts/req.sh
     - name: Build packages
@@ -22,7 +22,7 @@ jobs:
         . ./.github/scripts/env.sh
         export CSHA=${GITHUB_SHA:0:7}
         export TAIL="Nightly_${CSHA}"
-        make pkg && export FILEMANAGER=1 && make pkg
+        make pkg VERBOSE=1 V=1
         export TAGGY="nightly_${CSHA}" && ./.github/scripts/name.sh
     - name: Delete old assets
       uses: mknejp/delete-release-assets@v1
@@ -38,6 +38,5 @@ jobs:
         body: "Up-to-date packages including the latest updates to the repository.\n- Unless otherwise specified, this release has not been thoroughly tested.\n- For included changes, see the [commit log](https://github.com/Zarh/ManaGunZ/commits/master).\n\nUse at your own risk."
         files: |
           ./ManaGunZ*.pkg
-          ./FileManager*.pkg
         update_tag: true
         prerelease: true
