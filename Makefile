@@ -9,6 +9,7 @@ endif
 
 include $(PSL1GHT)/ppu_rules
 
+Q		=	$(if $(filter 1,$(VERBOSE)),, @)
 
 #---------------------------------------------------------------------------------
 # ManaGunZ : "make pkg"
@@ -26,8 +27,7 @@ BUILD		:=	build
 SOURCES		:=	source
 DATA		:=	data
 INCLUDES	:=	include
-PKGFILES1	:=	$(CURDIR)/pkgfiles
-PKGFILES2	:=	$(CURDIR)/pkgfiles2
+PKGFILES	:=	$(CURDIR)/pkgfiles
 SFOXML		:=	sfo.xml
 
 VERSION		:=	1.42
@@ -36,18 +36,10 @@ ifeq ($(BDVD), 1)
 MACHDEP		+= -D_BDVD_BUILD_
 endif
 
-ifeq ($(FILEMANAGER), 1)
-PKGFILES	:=	$(PKGFILES2)
-MACHDEP		+=	-DFILEMANAGER
-TARGET		:=	FileManager
-TITLE		:=	File Manager v$(VERSION) $(TAIL)
-APPID		:=	FILEMANAG
-else
-PKGFILES	:=	$(PKGFILES1)
+PKGFILES	:=	$(PKGFILES)
 TARGET		:=	ManaGunZ
 TITLE		:=	$(TARGET) v$(VERSION) $(TAIL)
 APPID		:=	MANAGUNZ0
-endif
 CONTENTID	:=	EP0001-$(APPID)_00-0000000000000000
 
 SCETOOL_FLAGS	+=	--self-ctrl-flags 4000000000000000000000000000000000000000000000000000000000000002
@@ -141,21 +133,21 @@ export OUTPUT	:=	$(CURDIR)/$(TARGET)_v$(VERSION)
 
 #---------------------------------------------------------------------------------
 $(BUILD):
-	@$(MAKE) small_clean --no-print-directory
-	@$(MAKE) -C MGZ --no-print-directory
-	@cp -f MGZ/MGZ.self $(PKGFILES)/USRDIR/$(TARGET).self
-	@[ -d $@ ] || mkdir -p $@
-	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
+	$(Q)$(MAKE) small_clean --no-print-directory
+	$(Q)$(MAKE) -C MGZ --no-print-directory
+	$(Q)cp -f MGZ/MGZ.self $(PKGFILES)/USRDIR/$(TARGET).self
+	$(Q)[ -d $@ ] || mkdir -p $@
+	$(Q)$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 ifeq ($(FILEMANAGER), 1)
-	@cp -fr $(PKGFILES1)/USRDIR/GUI/common $(PKGFILES2)/USRDIR/GUI
-	@cp -fr $(PKGFILES1)/USRDIR/GUI/colorset.ini $(PKGFILES2)/USRDIR/GUI
-	@cp -fr $(PKGFILES1)/USRDIR/sys/data $(PKGFILES2)/USRDIR/sys
-	@cp -fr $(PKGFILES1)/USRDIR/sys/loc $(PKGFILES2)/USRDIR/sys
-	@cp -fr $(PKGFILES1)/USRDIR/sys/RCO $(PKGFILES2)/USRDIR/sys
-	@cp -fr $(PKGFILES1)/USRDIR/sys/Check.zip $(PKGFILES2)/USRDIR/sys
-	@cp -fr $(PKGFILES1)/USRDIR/sys/sprx_iso $(PKGFILES2)/USRDIR/sys
-	@cp -fr $(PKGFILES1)/USRDIR/sys/PSP_CRC.txt $(PKGFILES2)/USRDIR/sys
-	@cp -fr $(PKGFILES1)/USRDIR/sys/dev_klics.txt $(PKGFILES2)/USRDIR/sys
+	$(Q)cp -fr $(PKGFILES1)/USRDIR/GUI/common $(PKGFILES2)/USRDIR/GUI
+	$(Q)cp -fr $(PKGFILES1)/USRDIR/GUI/colorset.ini $(PKGFILES2)/USRDIR/GUI
+	$(Q)cp -fr $(PKGFILES1)/USRDIR/sys/data $(PKGFILES2)/USRDIR/sys
+	$(Q)cp -fr $(PKGFILES1)/USRDIR/sys/loc $(PKGFILES2)/USRDIR/sys
+	$(Q)cp -fr $(PKGFILES1)/USRDIR/sys/RCO $(PKGFILES2)/USRDIR/sys
+	$(Q)cp -fr $(PKGFILES1)/USRDIR/sys/Check.zip $(PKGFILES2)/USRDIR/sys
+	$(Q)cp -fr $(PKGFILES1)/USRDIR/sys/sprx_iso $(PKGFILES2)/USRDIR/sys
+	$(Q)cp -fr $(PKGFILES1)/USRDIR/sys/PSP_CRC.txt $(PKGFILES2)/USRDIR/sys
+	$(Q)cp -fr $(PKGFILES1)/USRDIR/sys/dev_klics.txt $(PKGFILES2)/USRDIR/sys
 endif
 	
 #---------------------------------------------------------------------------------
@@ -164,45 +156,45 @@ endif
 #---------------------------------------------------------------------------------
 
 small_clean:
-	@rm -fr $(BUILD) *.elf *.self $(TARGET)_v*.pkg
-	@rm -fr MGZ/build/main.o
+	$(Q)rm -fr $(BUILD) *.elf *.self $(TARGET)_v*.pkg
+	$(Q)rm -fr MGZ/build/main.o
 
 #---------------------------------------------------------------------------------
 clean:
-	@echo clean ...
-	@rm -fr $(BUILD) *.elf *.self *.pkg
-	@$(MAKE) clean -C MGZ --no-print-directory
-	@$(MAKE) clean -C MGZ/lib/cobra --no-print-directory
-	@$(MAKE) clean -C MGZ/lib/ImageMagick --no-print-directory
-	@$(MAKE) clean -C MGZ/lib/libapputil --no-print-directory
-	@$(MAKE) clean -C MGZ/lib/libgtfconv --no-print-directory
-	@$(MAKE) clean -C MGZ/lib/libiconv --no-print-directory
-	@$(MAKE) clean -C MGZ/lib/libntfs_ext --no-print-directory
-	@$(MAKE) clean -C payloads/MAMBA --no-print-directory
-	@$(MAKE) clean -C payloads/PS2_EMU --no-print-directory
-	@$(MAKE) clean -C payloads/rawseciso --no-print-directory
-	@rm -fr $(PKGFILES1)/USRDIR/$(TARGET).self
-	@rm -fr $(PKGFILES2)/USRDIR
+	$(Q)echo clean ...
+	$(Q)rm -fr $(BUILD) *.elf *.self *.pkg
+	$(Q)$(MAKE) clean -C MGZ --no-print-directory
+	$(Q)$(MAKE) clean -C MGZ/lib/cobra --no-print-directory
+	$(Q)$(MAKE) clean -C MGZ/lib/ImageMagick --no-print-directory
+	$(Q)$(MAKE) clean -C MGZ/lib/libapputil --no-print-directory
+	$(Q)$(MAKE) clean -C MGZ/lib/libgtfconv --no-print-directory
+	$(Q)$(MAKE) clean -C MGZ/lib/libiconv --no-print-directory
+	$(Q)$(MAKE) clean -C MGZ/lib/libntfs_ext --no-print-directory
+	$(Q)$(MAKE) clean -C payloads/MAMBA --no-print-directory
+	$(Q)$(MAKE) clean -C payloads/PS2_EMU --no-print-directory
+	$(Q)$(MAKE) clean -C payloads/rawseciso --no-print-directory
+	$(Q)rm -fr $(PKGFILES1)/USRDIR/$(TARGET).self
+	$(Q)rm -fr $(PKGFILES2)/USRDIR
 	
 #---------------------------------------------------------------------------------
 update:
 	cd OffsetFinder; ./OffsetFinder.exe extract
 	cd OffsetFinder; ./OffsetFinder.exe search
 	cd OffsetFinder; ./OffsetFinder.exe move
-	@$(MAKE) -C payloads/SKY --no-print-directory
-	@rm -f payloads/MAMBA/bin/*.bin
-	@rm -f payloads/MAMBA/bin/debug/*.bin
-	@$(MAKE) release -C payloads/MAMBA --no-print-directory
-	@$(MAKE) loader -C payloads/MAMBA --no-print-directory
-	@mv -f payloads/MAMBA/bin/mamba_*.lz.bin  MGZ/data
-	@mv -f payloads/MAMBA/bin/mamba_loader_*.bin  MGZ/data
-	@$(MAKE) all -C payloads/PS2_EMU --no-print-directory
-	@mv -f payloads/PS2_EMU/BIN/*.bin  MGZ/data
-	@$(MAKE) -C payloads/rawseciso --no-print-directory
-	@mv -f payloads/rawseciso/rawseciso.sprx $(PKGFILES)/USRDIR/sys/sprx_iso
-	@$(MAKE) -C payloads/erk_dumper/spu --no-print-directory
-	@$(MAKE) -C payloads/erk_dumper/source --no-print-directory
-	@mv -f payloads/erk_dumper/bin/*.bin  MGZ/data
+	$(Q)$(MAKE) -C payloads/SKY --no-print-directory
+	$(Q)rm -f payloads/MAMBA/bin/*.bin
+	$(Q)rm -f payloads/MAMBA/bin/debug/*.bin
+	$(Q)$(MAKE) release -C payloads/MAMBA --no-print-directory
+	$(Q)$(MAKE) loader -C payloads/MAMBA --no-print-directory
+	$(Q)mv -f payloads/MAMBA/bin/mamba_*.lz.bin  MGZ/data
+	$(Q)mv -f payloads/MAMBA/bin/mamba_loader_*.bin  MGZ/data
+	$(Q)$(MAKE) all -C payloads/PS2_EMU --no-print-directory
+	$(Q)mv -f payloads/PS2_EMU/BIN/*.bin  MGZ/data
+	$(Q)$(MAKE) -C payloads/rawseciso --no-print-directory
+	$(Q)mv -f payloads/rawseciso/rawseciso.sprx $(PKGFILES)/USRDIR/sys/sprx_iso
+	$(Q)$(MAKE) -C payloads/erk_dumper/spu --no-print-directory
+	$(Q)$(MAKE) -C payloads/erk_dumper/source --no-print-directory
+	$(Q)mv -f payloads/erk_dumper/bin/*.bin  MGZ/data
 #---------------------------------------------------------------------------------
 translate:
 	cd TranslateMGZ; ./TranslateMGZ.exe ../MGZ/source/str.h ../pkgfiles/USRDIR/sys/loc/
@@ -210,11 +202,11 @@ translate:
 #---------------------------------------------------------------------------------
 lib:
 	$(MAKE) -C MGZ/lib/cobra --no-print-directory
-	@mv -f MGZ/lib/cobra/libcobra.a MGZ/lib/libcobra.a
+	$(Q)mv -f MGZ/lib/cobra/libcobra.a MGZ/lib/libcobra.a
 	$(MAKE) -C MGZ/lib/libntfs_ext --no-print-directory
 	$(MAKE) -C MGZ/lib/OpenSSL --no-print-directory
-	@mv -f MGZ/lib/OpenSSL/libcrypto.a MGZ/lib/libcrypto.a
-	@mv -f MGZ/lib/OpenSSL/libssl.a MGZ/lib/libssl.a
+	$(Q)mv -f MGZ/lib/OpenSSL/libcrypto.a MGZ/lib/libcrypto.a
+	$(Q)mv -f MGZ/lib/OpenSSL/libssl.a MGZ/lib/libssl.a
 #---------------------------------------------------------------------------------
 ntfs:
 	$(MAKE) -C MGZ/lib/libntfs_ext --no-print-directory
@@ -241,37 +233,37 @@ $(OUTPUT).elf:	$(OFILES)
 #---------------------------------------------------------------------------------
 %.bin.o	:	%.bin
 #---------------------------------------------------------------------------------
-	@echo $(notdir $<)
-	@$(bin2o)
+	$(Q)echo $(notdir $<)
+	$(Q)$(bin2o)
 
 #---------------------------------------------------------------------------------
 %.ttf.o	:	%.ttf
 #---------------------------------------------------------------------------------
-	@echo $(notdir $<)
-	@$(bin2o)
+	$(Q)echo $(notdir $<)
+	$(Q)$(bin2o)
 
 #---------------------------------------------------------------------------------
 %.vpo.o	:	%.vpo
 #---------------------------------------------------------------------------------
-	@echo $(notdir $<)
-	@$(bin2o)
+	$(Q)echo $(notdir $<)
+	$(Q)$(bin2o)
 
 #---------------------------------------------------------------------------------
 %.fpo.o	:	%.fpo
 #---------------------------------------------------------------------------------
-	@echo $(notdir $<)
-	@$(bin2o)
+	$(Q)echo $(notdir $<)
+	$(Q)$(bin2o)
 
 #---------------------------------------------------------------------------------
 %.jpg.o	:	%.jpg
 #---------------------------------------------------------------------------------
-	@echo $(notdir $<)
-	@$(bin2o)
+	$(Q)echo $(notdir $<)
+	$(Q)$(bin2o)
 #---------------------------------------------------------------------------------
 %.png.o	:	%.png
 #---------------------------------------------------------------------------------
-	@echo $(notdir $<)
-	@$(bin2o)
+	$(Q)echo $(notdir $<)
+	$(Q)$(bin2o)
 
 -include $(DEPENDS)
 
