@@ -24,9 +24,9 @@ jobs:
         export TAIL="Nightly_${CSHA}"
         make pkg VERBOSE=1 V=1
         export TAGGY="nightly_${CSHA}" && ./.github/scripts/name.sh
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        with:
+    - name: Release
+      uses: softprops/action-gh-release@v2
+      with:
           tag_name: pkg-${{ github.sha }}
           name: pkg-${{ github.sha }}
           prerelease: false
