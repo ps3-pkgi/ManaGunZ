@@ -30,4 +30,5 @@ jobs:
           tag_name: pkg-${{ github.sha }}
           name: pkg-${{ github.sha }}
           prerelease: false
-          files: *.pkg
+          files: |
+            *.pkg
