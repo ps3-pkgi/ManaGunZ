@@ -1,4 +1,5 @@
 #!/bin/bash
+set -x
 apt-get update
 apt-get -y upgrade
 apt-get -y install autoconf automake bison build-essential bzip2 ccache curl \

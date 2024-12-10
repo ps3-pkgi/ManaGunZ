@@ -1,4 +1,5 @@
 #!/bin/bash
+set -x
 for i in *.pkg; do
     k=$i
     # Remove version.
