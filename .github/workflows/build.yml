@@ -24,19 +24,10 @@ jobs:
         export TAIL="Nightly_${CSHA}"
         make pkg VERBOSE=1 V=1
         export TAGGY="nightly_${CSHA}" && ./.github/scripts/name.sh
-    - name: Delete old assets
-      uses: mknejp/delete-release-assets@v1
-      with:
-        token: ${{ github.token }}
-        tag: nightly
-        assets: '*.pkg'
-    - name: Create release
-      uses: iTrooz/action-gh-release@update_tag
-      with:
-        name: "Nightly Release"
-        tag_name: nightly
-        body: "Up-to-date packages including the latest updates to the repository.\n- Unless otherwise specified, this release has not been thoroughly tested.\n- For included changes, see the [commit log](https://github.com/Zarh/ManaGunZ/commits/master).\n\nUse at your own risk."
-        files: |
-          ./ManaGunZ*.pkg
-        update_tag: true
-        prerelease: true
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: pkg-${{ github.sha }}
+          name: pkg-${{ github.sha }}
+          prerelease: false
+          files: *.pkg
