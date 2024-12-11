@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include <sys/socket.h>
@@ -8,7 +9,6 @@
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <cstdio>
 
 #define PORT 21
 #define BUFFER_SIZE 1024
@@ -166,8 +166,8 @@ void ftp_init() {
         server.start();
     } catch (const std::exception &e) {
         std::cerr << "Error: " << e.what() << std::endl;
-        return EXIT_FAILURE;
+        return;
     }
 
-    return EXIT_SUCCESS;
+    return;
 }
