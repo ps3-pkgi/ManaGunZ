@@ -160,7 +160,7 @@ private:
     }
 };
 
-int ftp_init() {
+void ftp_init() {
     try {
         FTPServer server;
         server.start();
