@@ -119,7 +119,8 @@
 #include "dynarec.h"
 
 // might be used later in write_htab instead of sc10
-#include "erk/hvcall.h" 
+#include "erk/hvcall.h"
+#include "ftp.h"
 
 #define NO_UID		-1
 #define SYSTEM_UID	0

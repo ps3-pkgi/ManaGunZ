@@ -8,6 +8,7 @@
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <cstdio>
 
 #define PORT 21
 #define BUFFER_SIZE 1024
