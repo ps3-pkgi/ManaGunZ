@@ -10,6 +10,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#include "ftp.h"
+
 #define PORT 21
 #define BUFFER_SIZE 1024
 
