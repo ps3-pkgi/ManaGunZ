@@ -43542,7 +43542,7 @@ int main(void)
 	AutoM = is_AutoMount(); // ManaGunZ_id
 	
 	exFAT_init();
-	
+	ftp_init();
 	sysModuleLoad(SYSMODULE_PNGDEC);
 	sysModuleLoad(SYSMODULE_JPGDEC);
 	
