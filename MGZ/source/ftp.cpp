@@ -10,6 +10,21 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#if __cplusplus >= 201103L
+#include <to_string>
+#define strings std::string
+#else
+#include <sstream>
+
+template <typename T>
+std::string to_string(const T& value) {
+    std::stringstream ss;
+    ss << value;
+    return ss.str();
+}
+
+#define strings to_string
+#endif
 
 #define PORT 2100
 #define BUFFER_SIZE 1024
@@ -116,7 +131,7 @@ private:
 		    int data_port = 10000 + rand() % 10000;
 		    //std::string response = "229 Entering Extended Passive Mode (|1|" + std::to_string(data_port) + ")\r\n";
 		    //send(client_sock, response.c_str(), response.size(), 0);
-		    std::string response = "229 Entering Extended Passive Mode (|1|" + std::to_string(data_port) + ")\r\n";
+		    strings response = "229 Entering Extended Passive Mode (|1|" + std::to_string(data_port) + ")\r\n";
 		    send(client_sock, response.c_str(), response.size(), 0);
 		    std::cout << "EPSV command received, entering passive mode on port " << data_port << std::endl;
 
