@@ -10,9 +10,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#include "ftp.h"
 
-#define PORT 21
+#define PORT 2100
 #define BUFFER_SIZE 1024
 
 class FTPServer {
@@ -82,6 +81,7 @@ private:
             send(client_sock, "220 Simple FTP Server\r\n", 23, 0);
 
             // Handle commands
+            bool user_authenticated = false; // Flag to check if user has authenticated
             while (true) {
                 memset(buffer, 0, BUFFER_SIZE);
                 int bytes_received = recv(client_sock, buffer, BUFFER_SIZE - 1, 0);
@@ -97,12 +97,69 @@ private:
                 if (command == "QUIT") {
                     send(client_sock, "221 Goodbye.\r\n", 14, 0);
                     break;
-                } else if (command == "PWD") {
+                } else if (command == "USER anonymous") {
+                    send(client_sock, "331 User name okay, need password.\r\n", 36, 0);
+                } else if (command == "PASS ftp@example.com") {
+                    send(client_sock, "230 User logged in, proceed.\r\n", 30, 0);
+                    user_authenticated = true;
+                } else if (user_authenticated && command == "PWD") {
                     handle_pwd(client_sock);
-                } else if (command.substr(0, 3) == "CWD") {
+                } else if (user_authenticated && command.substr(0, 3) == "CWD") {
                     handle_cwd(client_sock, command.substr(4));
-                } else if (command == "LIST") {
+                } else if (user_authenticated && command == "LIST") {
                     handle_list(client_sock);
+                } else if (user_authenticated && command == "PASV") {
+                    // Respond to PASV command with a simulated passive mode port (e.g., 12345)
+                    send(client_sock, "227 Entering Passive Mode (127,0,0,1,48,57)\r\n", 47, 0); // 12345 -> (48,57)
+		} else if (user_authenticated && command == "EPSV") {
+		    // 假设服务器使用端口 12345 作为数据连接端口
+		    int data_port = 10000 + rand() % 10000;
+		    //std::string response = "229 Entering Extended Passive Mode (|1|" + std::to_string(data_port) + ")\r\n";
+		    //send(client_sock, response.c_str(), response.size(), 0);
+		    std::string response = "229 Entering Extended Passive Mode (|1|" + std::to_string(data_port) + ")\r\n";
+		    send(client_sock, response.c_str(), response.size(), 0);
+		    std::cout << "EPSV command received, entering passive mode on port " << data_port << std::endl;
+
+		    // 在该端口监听数据连接（简化版）
+		    int data_sock = socket(AF_INET, SOCK_STREAM, 0);
+		    if (data_sock < 0) {
+		        perror("Data socket creation failed");
+		        return;
+		    }
+
+		    struct sockaddr_in data_addr;
+		    std::memset(&data_addr, 0, sizeof(data_addr));
+		    data_addr.sin_family = AF_INET;
+		    data_addr.sin_addr.s_addr = INADDR_ANY;
+		    data_addr.sin_port = htons(data_port);
+
+		    if (bind(data_sock, (struct sockaddr *)&data_addr, sizeof(data_addr)) < 0) {
+		        perror("Data socket bind failed");
+	        	close(data_sock);
+		        return;
+		    }
+
+		    if (listen(data_sock, 1) < 0) {
+		        perror("Data socket listen failed");
+		        close(data_sock);
+		        return;
+		    }
+
+		    std::cout << "Listening for data connection on port " << data_port << std::endl;
+
+		    // 等待数据连接
+		    int data_client_sock = accept(data_sock, NULL, NULL);
+		    if (data_client_sock < 0) {
+		        perror("Data connection accept failed");
+		        close(data_sock);
+		        return;
+		    }
+
+		    std::cout << "Data connection established." << std::endl;
+		    close(data_client_sock);
+		    close(data_sock);
+                } else if (!user_authenticated) {
+                    send(client_sock, "530 Not logged in.\r\n", 19, 0); // Respond with 530 if not authenticated
                 } else {
                     send(client_sock, "502 Command not implemented.\r\n", 30, 0);
                 }
@@ -112,10 +169,10 @@ private:
         }
     }
 
-    void handle_pwd(int client_sock) {
-        char cwd[BUFFER_SIZE];
-        if (getcwd(cwd, sizeof(cwd)) != NULL) {
-            std::string response = "257 \"" + std::string(cwd) + "\" is the current directory.\r\n";
+        void handle_pwd(int client_sock) {
+            char cwd[BUFFER_SIZE];
+            if (getcwd(cwd, sizeof(cwd)) != NULL) {
+                    std::string response = "257 \"" + std::string(cwd) + "\" is the current directory.\r\n";
             send(client_sock, response.c_str(), response.size(), 0);
         } else {
             send(client_sock, "550 Failed to get current directory.\r\n", 38, 0);
