@@ -1,23 +1,6 @@
-/*
-ftserve.h
-*/
-#ifndef FTSERVE_H
-#define FTSERVE_H
+#ifndef OPF_SERVER_H
+#define OPF_SERVER_H
 
-#include "ftp.h"
+void listener_thread(void *unused);
 
-void ftserve_retr(int sock_control, int sock_data, char* filename);
-
-int ftserve_list(int sock_data, int sock_control);
-
-int ftserve_start_data_conn(int sock_control);
-
-int ftserve_check_user(char*user, char*pass);
-
-int ftserve_login(int sock_control);
-
-int ftserve_recv_cmd(int sock_control, char*cmd, char*arg);
-
-void ftserve_process(int sock_control);
-
-#endif
+#endif /* OPF_SERVER_H */

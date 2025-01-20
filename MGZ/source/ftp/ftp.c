@@ -1,162 +1,185 @@
-/*
-common.c
-*/
+#include <stdio.h>
+#include <string.h>
+#include <malloc.h>
+#include <ppu-types.h>
+#include <net/net.h>
+#include <net/netctl.h>
+
+#include <sys/file.h>
+#include <sys/thread.h>
+#include <sys/systime.h>
+
+#include "defines.h"
+#include "server.h"
+#include "functions.h"
 #include "ftp.h"
 
-/**
- * 创建监听套接字
- * 错误返回 -1，正确返回套接字描述符
- */
-int socket_create(int port)
+extern char passwd[64];
+
+int ftp_port = 21;
+
+int appstate = 0;
+
+static int ftp_initialized = 0;
+
+volatile int ftp_working = 0;
+
+char ftp_ip_str[256] = "";
+
+static sys_ppu_thread_t thread_id;
+static sys_ppu_thread_t thread_id2;
+
+static void control_thread(void *a)
 {
-    int sockfd;
-    int yes = 1;
-    struct sockaddr_in sock_addr;
+    int n = 0;
 
-    // 创建套接字
-    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) 
-    {
-        perror("socket() error"); 
-        return -1; 
+    while(appstate != 1) {
+        sysUsleep(100000);
+        n++;
+        if(ftp_working == 2) {ftp_working = 3; n = 0;}
+        if(n >= 100) {
+            if(ftp_working == 3) ftp_working = 0;
+            n = 0;
+        }
     }
 
-    // 设置本地套接字地址
-    sock_addr.sin_family = AF_INET;
-    sock_addr.sin_port = htons(port);
-    sock_addr.sin_addr.s_addr = htonl(INADDR_ANY);        
-
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) 
-    {
-        close(sockfd);
-        perror("setsockopt() error");
-        return -1; 
-    }
-
-    // 绑定本地套接字地址到套接字
-    if (bind(sockfd, (struct sockaddr *) &sock_addr, sizeof(sock_addr)) < 0) 
-    {
-        close(sockfd);
-        perror("bind() error"); 
-        return -1; 
-    }
-   
-    // 将套接字设置为监听状态
-    if (listen(sockfd, 5) < 0) 
-    {
-        close(sockfd);
-        perror("listen() error");
-        return -1;
-    }              
-    return sockfd;
+    sysThreadExit(0);
 }
 
-/**
- * 套接字接受请求
- * 错误返回 -1，正确返回新的连接套接字
- */
-int socket_accept(int sock_listen)
+int get_ftp_activity()
 {
-    int sockfd;
-    struct sockaddr_in client_addr;
-    socklen_t len = sizeof(client_addr);
-    sockfd = accept(sock_listen, (struct sockaddr *) &client_addr, &len); // 等待连接
-    
-    if (sockfd < 0)
-    {
-        perror("accept() error"); 
-        return -1; 
-    }
-    return sockfd;
+    if(!ftp_initialized) return 0;
+
+    return (ftp_working!=0);
 }
 
-/**
- * 连接远端主机
- *  成功返回套接字描述符，失败返回 -1
-*/
-int socket_connect(int port, char*host)
+static int _net_initialized = 0;
+
+int ftp_net_init()
 {
-    int sockfd;                      
-    struct sockaddr_in dest_addr;
+    if(_net_initialized) return 0;
 
-    /* 创建套接字 */
-    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-    { 
-            perror("error creating socket");
-            return -1;
-    }
+    if(netInitialize()<0) return -1;
 
-    /* 设置协议地址 */
-    memset(&dest_addr, 0, sizeof(dest_addr));
-    dest_addr.sin_family = AF_INET;
-    dest_addr.sin_port = htons(port);
-    dest_addr.sin_addr.s_addr = inet_addr(host);
+    if(netCtlInit()<0) {netDeinitialize();return -2;}
 
-    /* 在套接字上创建连接 */
-    if(connect(sockfd, (struct sockaddr *)&dest_addr, sizeof(dest_addr)) < 0 )
-    {
-        perror("error connecting to server");
-        return -1;
-    }    
-    return sockfd;
-}
+    _net_initialized = 1;
 
-/**
- * 接收数据
- * 错误返回 -1，正确返回接收的字节数 
- */
-int recv_data(int sockfd, char* buf, int bufsize)
-{
-    size_t num_bytes;
-    memset(buf, 0, bufsize);
-
-    /* 调用 recv 函数读取套接字数据 */
-    num_bytes = recv(sockfd, buf, bufsize, 0);
-    if (num_bytes < 0) 
-        return -1;
-
-    return num_bytes;
-}
-
-/**
- * 去除字符串中的空格和换行符
- */
-void trimstr(char *str, int n)
-{
-    int i;
-    for (i = 0; i < n; i++) 
-    {
-        if (isspace(str[i])) str[i] = 0;
-        if (str[i] == '\n') str[i] = 0;
-    }
-}
-
-/**
- * 发送响应码到 sockfd
- * 错误返回 -1，正确返回 0
- */
-int send_response(int sockfd, int rc)
-{
-    int conv = htonl(rc);
-    if (send(sockfd, &conv, sizeof conv, 0) < 0 ) 
-    {
-        perror("error sending...\n");
-        return -1;
-    }
     return 0;
+
 }
 
-/** 
- * 从命令行中读取输入
- */
-void read_input(char* buffer, int size)
+int ftp_net_deinit()
 {
-    char *nl = NULL;
-    memset(buffer, 0, size);
+    if(!_net_initialized) return 0;
 
-    if ( fgets(buffer, size, stdin) != NULL ) 
-    {
-        nl = strchr(buffer, '\n');
-        if (nl) 
-            *nl = '\0'; // 出现换行符，则将该位置部位'\0'（字符串结尾）
+    _net_initialized = 0;
+
+    netCtlTerm();
+    netDeinitialize();
+
+    return 0;
+
+}
+
+int ftp_net_status()
+{
+    if(!_net_initialized) return -1;
+
+    s32 state = 0;
+
+    if(netCtlGetState(&state)<0 || state !=NET_CTL_STATE_IPObtained) {
+
+        return -4;
     }
+
+    return 0;
+
+}
+
+int ftp_init()
+{
+    if(ftp_initialized) return 1;
+
+    ftp_working = 0;
+
+    int r = ftp_net_init();
+    if(r < 0) return r;
+
+    s32 state = 0;
+
+    if(netCtlGetState(&state) < 0 || state != 3) {
+        ftp_initialized = 0;
+        ftp_net_deinit();
+        return -4;
+    }
+
+    union net_ctl_info info;
+
+    if(netCtlGetInfo(NET_CTL_INFO_IP_ADDRESS, &info) == 0)
+    {
+        // start server thread
+
+        appstate = 0;
+        sprintf(ftp_ip_str, "FTP active (%s:%i)", info.ip_address, ftp_port);
+        sysThreadCreate(&thread_id, listener_thread, NULL, 999, 0x400, THREAD_JOINABLE, "listener");
+        sysThreadCreate(&thread_id2, control_thread, NULL, 1501, 0x400, THREAD_JOINABLE, "ctrl_ftp");
+/*
+        s32 fd;
+        u64 read = 0;
+
+        if(sysLv2FsOpen(OFTP_PASSWORD_FILE, SYS_O_RDONLY | SYS_O_CREAT, &fd, 0660, NULL, 0) == 0)
+        {
+            sysLv2FsRead(fd, passwd, 63, &read);
+        }
+
+        passwd[read] = '\0';
+        sysLv2FsClose(fd);
+
+        // prevent multiline passwords
+        strreplace(passwd, '\r', '\0');
+        strreplace(passwd, '\n', '\0');
+*/
+
+        char dlgmsg[256];
+        sprintf(dlgmsg, "OpenPS3FTP %s by jjolano (Twitter: @jjolano)\n"
+                        "Website: http://jjolano.dashhacks.com\n"
+                        "Donations: http://bit.ly/gB8CJo\n"
+                        "Status: FTP Server Active (%s port 21)\n\n"
+                        "Press OK to exit this program.",
+            OFTP_VERSION, info.ip_address);
+
+        //msgDialogOpen2(mt_ok, dlgmsg, dialog_handler, NULL, NULL);
+        ftp_initialized = 1;
+
+        return 0;
+
+    }
+    else
+    {
+        //msgDialogOpen2(mt_ok, OFTP_ERRMSG_NETWORK, dialog_handler, NULL, NULL);
+
+        ftp_initialized = 0;
+        ftp_net_deinit();
+    }
+
+    return -3;
+}
+
+void ftp_deinit()
+{
+    if(!ftp_initialized) return;
+
+    appstate = 1;
+
+    ftp_net_deinit();
+
+    u64 retval;
+    sysThreadJoin(thread_id, &retval);
+    sysThreadJoin(thread_id2, &retval);
+
+    ftp_initialized = 0;
+    ftp_working = 0;
+
+    memset(ftp_ip_str, 0, sizeof(ftp_ip_str));
 }
