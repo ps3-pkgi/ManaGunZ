@@ -43736,9 +43736,7 @@ int main(void)
 		txt_viewer_input();
 		input_ICON0_creator();
 	}
-	auto_ftp();
 	ftp_init();
-	ftp_net_init();
 	return 0;
 }
 

@@ -1,10 +1,6 @@
-#ifndef FTP_H
-#define FTP_H
+#ifdef F
+#define F
 
-#include "ftp/ftp.h"
-#include "ftp/functions.h"
-
-ftp_port = 21;
+void ftp_init();
 
 #endif
-
