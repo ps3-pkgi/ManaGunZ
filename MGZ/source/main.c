@@ -43586,28 +43586,6 @@ int main(void)
 	}
 	
 	//init_MAP_PATHS_LIST();
-
-#ifdef FILEMANAGER
-
-	print_debug("getDevices");
-	getDevices();
-	print_debug("is_cobra");
-	cobra = is_cobra();
-	print_debug("is_mamba");
-	mamba = is_mamba();
-
-	print_load(STR_ADJUST);
-	adjust_screen();
-
-	print_load("Load Theme");
-	Load_Theme();
-	
-	Draw_FileExplorer();
-	
-	MGZ_exit();
-	
-	return 0;
-#endif // FILEMANAGER
 	
 	if(init_ManaGunZ() == FAILED) {
 		end_loading();

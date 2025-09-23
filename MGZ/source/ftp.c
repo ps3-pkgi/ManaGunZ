@@ -1,181 +1,179 @@
 /**
- * PS3 简易 FTP 服务器 (for PSL1GHT + PS3Toolchain)
- * 麻雀虽小，五脏俱全，支持后台运行
- * 编译: ppu-gcc -o ps3_ftpd ps3_ftpd.c -lpthread
+ * PS3 极简 FTP 服务器 (适配 GCC 4.7.4 + newlib)
+ * 一次只服务一个客户端，阻塞式
+ * 编译: ppu-gcc -o ftpd ftp_minimal.c
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <pthread.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <dirent.h>
-#include <sys/select.h>
-#include <netdb.h>
 
-#define FTP_PORT    21
-#define MAX_CLIENTS 8
+#define FTP_PORT 21
 
-// 全局控制
-static volatile int server_running = 0;
-static pthread_t server_thread;
+// 全局状态
 static int server_sock = -1;
+static volatile int server_running = 0;
 
-// 获取 PS3 本机 IP（用于提示用户）
-void get_local_ip(char *ip_buf, size_t len) {
-    struct hostent *h;
-    char hostname[256];
-    if (gethostname(hostname, sizeof(hostname)) == 0) {
-        h = gethostbyname(hostname);
-        if (h && h->h_addr_list[0]) {
-            strcpy(ip_buf, inet_ntoa(*(struct in_addr*)h->h_addr_list[0]));
-            return;
-        }
+// 数据连接信息（主动模式）
+static unsigned int g_data_ip = 0;   // 网络字节序
+static int          g_data_port = 0; // 主机字节序
+
+// 安全发送
+static void ftp_send(int sock, const char *msg) {
+    if (sock >= 0 && msg) {
+        send(sock, msg, strlen(msg), 0);
     }
-    strncpy(ip_buf, "127.0.0.1", len);
 }
 
-// 数据连接结构（主动模式 PORT）
-typedef struct {
-    unsigned char ip[4];
-    int port;
-} data_conn_t;
+// 解析 PORT 命令
+static int parse_port_command(const char *cmd) {
+    unsigned int a,b,c,d,e,f;
+    if (sscanf(cmd, "PORT %u,%u,%u,%u,%u,%u", &a,&b,&c,&d,&e,&f) == 6) {
+        g_data_ip = htonl((a << 24) | (b << 16) | (c << 8) | d);
+        g_data_port = (e << 8) | f;
+        return 1;
+    }
+    return 0;
+}
 
-// 客户端会话处理
-void *handle_client(void *arg) {
-    int client_sock = *(int*)arg;
-    free(arg); // 释放传入的堆内存
+// 建立数据连接
+static int open_data_connection(void) {
+    if (g_data_port == 0 || g_data_ip == 0) return -1;
 
-    data_conn_t data_conn = {0};
+    int s = socket(AF_INET, SOCK_STREAM, 0);
+    if (s < 0) return -1;
 
-    // 发送欢迎信息
-    send(client_sock, "220 PS3 FTP Server Ready\r\n", 26, 0);
+    struct sockaddr_in addr = {0};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(g_data_port);
+    addr.sin_addr.s_addr = g_data_ip;
+
+    if (connect(s, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
+        close(s);
+        return -1;
+    }
+
+    return s;
+}
+
+// 处理 LIST
+static void handle_list(int ctrl_sock) {
+    int data_sock = open_data_connection();
+    if (data_sock < 0) {
+        ftp_send(ctrl_sock, "425 Can't open data connection\r\n");
+        return;
+    }
+
+    ftp_send(ctrl_sock, "150 Opening ASCII mode data connection\r\n");
+
+    DIR *dir = opendir(".");
+    if (dir) {
+        struct dirent *de;
+        while ((de = readdir(dir)) != NULL) {
+            char line[256];
+            snprintf(line, sizeof(line), "%s\r\n", de->d_name);
+            send(data_sock, line, strlen(line), 0);
+        }
+        closedir(dir);
+    }
+
+    close(data_sock);
+    ftp_send(ctrl_sock, "226 Directory send OK\r\n");
+}
+
+// 处理 RETR
+static void handle_retr(int ctrl_sock, const char *filename) {
+    FILE *fp = fopen(filename, "rb");
+    if (!fp) {
+        ftp_send(ctrl_sock, "550 File not found\r\n");
+        return;
+    }
+
+    int data_sock = open_data_connection();
+    if (data_sock < 0) {
+        fclose(fp);
+        ftp_send(ctrl_sock, "425 Can't open data connection\r\n");
+        return;
+    }
+
+    ftp_send(ctrl_sock, "150 Opening BINARY mode data connection\r\n");
+
+    char buf[1024];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), fp)) > 0) {
+        send(data_sock, buf, n, 0);
+    }
+
+    fclose(fp);
+    close(data_sock);
+    ftp_send(ctrl_sock, "226 Transfer complete\r\n");
+}
+
+// 处理单个客户端会话
+static void handle_session(int client_sock) {
+    // 重置全局数据连接状态
+    g_data_ip = 0;
+    g_data_port = 0;
+
+    ftp_send(client_sock, "220 PS3 FTP Server Ready\r\n");
 
     char buf[512];
-    ssize_t n;
+    ssize_t len;
 
-    while ((n = recv(client_sock, buf, sizeof(buf)-1, 0)) > 0) {
-        buf[n] = '\0';
-        char *cmd = strtok(buf, "\r\n");
-        if (!cmd) continue;
+    while ((len = recv(client_sock, buf, sizeof(buf)-1, 0)) > 0) {
+        buf[len] = '\0';
 
-        if (strncasecmp(cmd, "USER ", 5) == 0) {
-            send(client_sock, "331 User OK, need password\r\n", 30, 0);
+        // 去除 \r\n
+        char *p = strpbrk(buf, "\r\n");
+        if (p) *p = '\0';
+
+        if (strncasecmp(buf, "USER ", 5) == 0) {
+            ftp_send(client_sock, "331 OK\r\n");
         }
-        else if (strncasecmp(cmd, "PASS ", 5) == 0) {
-            send(client_sock, "230 Login successful\r\n", 24, 0);
+        else if (strncasecmp(buf, "PASS ", 5) == 0) {
+            ftp_send(client_sock, "230 Login OK\r\n");
         }
-        else if (strncasecmp(cmd, "PORT ", 5) == 0) {
-            // 解析 PORT h1,h2,h3,h4,p1,p2
-            unsigned int a,b,c,d,e,f;
-            if (sscanf(cmd+5, "%u,%u,%u,%u,%u,%u", &a,&b,&c,&d,&e,&f) == 6) {
-                data_conn.ip[0] = a; data_conn.ip[1] = b;
-                data_conn.ip[2] = c; data_conn.ip[3] = d;
-                data_conn.port = (e << 8) | f;
-                send(client_sock, "200 PORT command successful\r\n", 30, 0);
+        else if (strncasecmp(buf, "PORT ", 5) == 0) {
+            if (parse_port_command(buf)) {
+                ftp_send(client_sock, "200 PORT OK\r\n");
             } else {
-                send(client_sock, "501 Invalid PORT format\r\n", 25, 0);
+                ftp_send(client_sock, "501 Invalid PORT\r\n");
             }
         }
-        else if (strcasecmp(cmd, "LIST") == 0) {
-            if (data_conn.port == 0) {
-                send(client_sock, "425 Use PORT or PASV first\r\n", 29, 0);
-                continue;
-            }
-
-            send(client_sock, "150 Opening ASCII mode data connection\r\n", 42, 0);
-
-            // 建立数据连接
-            int data_sock = socket(AF_INET, SOCK_STREAM, 0);
-            struct sockaddr_in data_addr = {0};
-            data_addr.sin_family = AF_INET;
-            data_addr.sin_port = htons(data_conn.port);
-            data_addr.sin_addr.s_addr = (data_conn.ip[0] << 24) |
-                                        (data_conn.ip[1] << 16) |
-                                        (data_conn.ip[2] << 8)  |
-                                         data_conn.ip[3];
-
-            if (connect(data_sock, (struct sockaddr*)&data_addr, sizeof(data_addr)) == 0) {
-                DIR *dir = opendir(".");
-                struct dirent *entry;
-                if (dir) {
-                    while ((entry = readdir(dir)) != NULL) {
-                        char line[512];
-                        //snprintf(line, sizeof(line), "-rw-r--r-- 1 root root 1024 Jan 01 00:00 %s\r\n", entry->d_name);
-                        send(data_sock, line, strlen(line), 0);
-                    }
-                    closedir(dir);
-                }
-                close(data_sock);
-                send(client_sock, "226 Directory send OK\r\n", 24, 0);
-            } else {
-                send(client_sock, "425 Can't open data connection\r\n", 33, 0);
-            }
+        else if (strcmp(buf, "LIST") == 0) {
+            handle_list(client_sock);
         }
-        else if (strncasecmp(cmd, "RETR ", 5) == 0) {
-            if (data_conn.port == 0) {
-                send(client_sock, "425 Use PORT or PASV first\r\n", 29, 0);
-                continue;
-            }
-
-            char *filename = cmd + 5;
-            FILE *fp = fopen(filename, "rb");
-            if (!fp) {
-                send(client_sock, "550 File not found\r\n", 20, 0);
-                continue;
-            }
-
-            send(client_sock, "150 Opening BINARY mode data connection\r\n", 42, 0);
-
-            int data_sock = socket(AF_INET, SOCK_STREAM, 0);
-            struct sockaddr_in data_addr = {0};
-            data_addr.sin_family = AF_INET;
-            data_addr.sin_port = htons(data_conn.port);
-            data_addr.sin_addr.s_addr = (data_conn.ip[0] << 24) |
-                                        (data_conn.ip[1] << 16) |
-                                        (data_conn.ip[2] << 8)  |
-                                         data_conn.ip[3];
-
-            if (connect(data_sock, (struct sockaddr*)&data_addr, sizeof(data_addr)) == 0) {
-                char chunk[1024];
-                size_t bytes_read;
-                while ((bytes_read = fread(chunk, 1, sizeof(chunk), fp)) > 0) {
-                    send(data_sock, chunk, bytes_read, 0);
-                }
-                fclose(fp);
-                close(data_sock);
-                send(client_sock, "226 Transfer complete\r\n", 24, 0);
-            } else {
-                fclose(fp);
-                send(client_sock, "425 Can't open data connection\r\n", 33, 0);
-            }
+        else if (strncasecmp(buf, "RETR ", 5) == 0) {
+            handle_retr(client_sock, buf + 5);
         }
-        else if (strcasecmp(cmd, "QUIT") == 0) {
-            send(client_sock, "221 Goodbye\r\n", 13, 0);
+        else if (strcmp(buf, "QUIT") == 0) {
+            ftp_send(client_sock, "221 Bye\r\n");
             break;
         }
         else {
-            send(client_sock, "502 Command not implemented\r\n", 30, 0);
+            ftp_send(client_sock, "502 Not implemented\r\n");
         }
     }
 
     close(client_sock);
-    pthread_exit(NULL);
 }
 
-// 主监听循环（运行在独立线程）
-void *ftp_server_loop(void *arg) {
-    server_running = 1;
+// 启动服务器（阻塞式，一次服务一个客户端）
+int ftpd_start(void) {
+    if (server_running) {
+        return -1;
+    }
 
     server_sock = socket(AF_INET, SOCK_STREAM, 0);
     if (server_sock < 0) {
         perror("socket");
-        server_running = 0;
-        pthread_exit(NULL);
+        return -1;
     }
 
     int opt = 1;
@@ -189,87 +187,90 @@ void *ftp_server_loop(void *arg) {
     if (bind(server_sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         perror("bind");
         close(server_sock);
-        server_running = 0;
-        pthread_exit(NULL);
+        return -1;
     }
 
-    if (listen(server_sock, MAX_CLIENTS) < 0) {
+    if (listen(server_sock, 1) < 0) { // backlog=1 足够
         perror("listen");
         close(server_sock);
-        server_running = 0;
-        pthread_exit(NULL);
+        return -1;
     }
 
-    char local_ip[32];
-    get_local_ip(local_ip, sizeof(local_ip));
-
-    while (server_running) {
-        struct sockaddr_in client_addr;
-        socklen_t client_len = sizeof(client_addr);
-        int client_sock = accept(server_sock, (struct sockaddr*)&client_addr, &client_len);
-
-        if (client_sock < 0) {
-            if (server_running) perror("accept");
-            continue;
-        }
-
-        // 为每个客户端创建线程
-        int *pclient = malloc(sizeof(int));
-        *pclient = client_sock;
-
-        pthread_t tid;
-        if (pthread_create(&tid, NULL, handle_client, pclient) != 0) {
-            free(pclient);
-            close(client_sock);
-            continue;
-        }
-        pthread_detach(tid); // 自动回收线程资源
-    }
-
-    close(server_sock);
-    server_sock = -1;
-    pthread_exit(NULL);
+    server_running = 1;
+    return 0;
 }
 
-// 启动 FTP 服务器（非阻塞，后台运行）
-void ftp_init() {
-    if (server_running) {
-        return;
+// 服务主循环（在你的 UI 线程中定期调用，或开独立线程）
+// 返回值：0=继续，-1=出错或停止
+int ftpd_service(void) {
+    if (!server_running || server_sock < 0) {
+        return -1;
     }
 
-    if (pthread_create(&server_thread, NULL, ftp_server_loop, NULL) != 0) {
-        return;
+    // 设置为非阻塞 accept
+    struct timeval tv = {0, 0}; // 0秒0微秒 → 立即返回
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(server_sock, &fds);
+
+    int ret = select(server_sock + 1, &fds, NULL, NULL, &tv);
+    if (ret < 0) {
+        perror("select");
+        return -1;
+    } else if (ret == 0) {
+        // 无连接，立即返回，不阻塞
+        return 0;
     }
 
-    return;
+    // 有新连接
+    int client_sock = accept(server_sock, NULL, NULL);
+    if (client_sock < 0) {
+        perror("accept");
+        return 0;
+    }
+
+
+    // ⚠️ 阻塞式处理该客户端，直到它断开
+    handle_session(client_sock);
+
+    // 继续等待下一个
+    return 0;
 }
 
-// 停止 FTP 服务器
+// 停止服务器
 int ftpd_stop(void) {
     if (!server_running) {
-        return;
+        return -1;
     }
 
     server_running = 0;
 
-    // 唤醒 accept() 以便优雅退出
     if (server_sock >= 0) {
-        close(server_sock); // 强制中断 accept
+        close(server_sock);
+        server_sock = -1;
     }
 
-    // 等待线程结束（最多5秒）
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    ts.tv_sec += 5;
-
-    if (pthread_timedjoin_np(server_thread, NULL, &ts) != 0) {
-        pthread_detach(server_thread);
-    }
-
-    return;
+    return 0;
 }
 
-// 查询运行状态
+// 查询状态
 int ftpd_is_running(void) {
     return server_running;
+}
+
+// ========================
+// 示例 main（用于独立测试）
+// ========================
+void ftp_init() {
+    if (ftpd_start() != 0) {
+        return;
+    }
+
+    while (ftpd_is_running()) {
+        ftpd_service(); // 非阻塞，可放在 UI 主循环中
+        usleep(100000); // 休眠 100ms，避免空转
+    }
+
+    ftpd_stop();
+    return;
 }
