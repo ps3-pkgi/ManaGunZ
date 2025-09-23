@@ -22,7 +22,7 @@ jobs:
         . ./.github/scripts/env.sh
         export CSHA=${GITHUB_SHA:0:7}
         export TAIL="Nightly_${CSHA}"
-        make pkg VERBOSE=1 V=1
+        make pkg
         export TAGGY="nightly_${CSHA}" && ./.github/scripts/name.sh
     - name: Release
       uses: softprops/action-gh-release@v2
