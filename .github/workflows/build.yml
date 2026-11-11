@@ -12,7 +12,7 @@ jobs:
         run:
           shell: bash
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Install build dependencies
       run: ./.github/scripts/req.sh
     - name: Build packages
