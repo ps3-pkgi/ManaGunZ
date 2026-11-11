@@ -17235,28 +17235,19 @@ int download(char *url, char *dst)
 	
 	u8 module_https_loaded=NO;
 	u8 module_http_loaded=NO;
-	u8 module_net_loaded=NO;
 	u8 module_ssl_loaded=NO;
 	
 	u8 https_init=NO;
 	u8 http_init=NO;
-	u8 net_init=NO;
 	u8 ssl_init=NO;
 
 	//init
-	ret = sysModuleLoad(SYSMODULE_NET);
+	ret = ftp_net_acquire();
 	if (ret < 0) {
-		print_load("Error : sysModuleLoad(SYSMODULE_NET) failed (%x)", ret);
+		print_load("Error : net init failed (%x)", ret);
 		ret=FAILED;
 		goto end;
-	} else module_net_loaded=YES;
-
-	ret = netInitialize();
-	if (ret < 0) {
-		print_load("Error : netInitialize failed (%x)", ret);
-		ret=FAILED;
-		goto end;
-	} else net_init=YES;
+	}
 
 	ret = sysModuleLoad(SYSMODULE_HTTP);
 	if (ret < 0) {
@@ -17455,11 +17446,10 @@ end:
 	if(https_init) httpsEnd();
 	if(ssl_init) sslEnd();
 	if(http_init) httpEnd();
-	if(net_init) netDeinitialize();
+	ftp_net_release();
 	
 	if(module_http_loaded) sysModuleUnload(SYSMODULE_HTTP);
 	if(module_https_loaded) sysModuleUnload(SYSMODULE_HTTPS);
-	if(module_net_loaded) sysModuleUnload(SYSMODULE_NET);
 	if(module_ssl_loaded) sysModuleUnload(SYSMODULE_SSL);
 	
 	if(uri_pool) free(uri_pool);
@@ -17486,26 +17476,18 @@ int http_response(char *url)
 	
 	u8 module_https_loaded=NO;
 	u8 module_http_loaded=NO;
-	u8 module_net_loaded=NO;
 	u8 module_ssl_loaded=NO;
 	
 	u8 https_init=NO;
 	u8 http_init=NO;
-	u8 net_init=NO;
 	u8 ssl_init=NO;
 
 	//init
-	ret = sysModuleLoad(SYSMODULE_NET);
+	ret = ftp_net_acquire();
 	if (ret < 0) {
-		print_load("Error : sysModuleLoad(SYSMODULE_NET) failed (%x)", ret);
+		print_load("Error : net init failed (%x)", ret);
 		goto end;
-	} else module_net_loaded=YES;
-
-	ret = netInitialize();
-	if (ret < 0) {
-		print_load("Error : netInitialize failed (%x)", ret);
-		goto end;
-	} else net_init=YES;
+	}
 
 	ret = sysModuleLoad(SYSMODULE_HTTP);
 	if (ret < 0) {
@@ -17644,11 +17626,10 @@ end:
 	if(https_init) httpsEnd();
 	if(ssl_init) sslEnd();
 	if(http_init) httpEnd();
-	if(net_init) netDeinitialize();
+	ftp_net_release();
 	
 	if(module_http_loaded) sysModuleUnload(SYSMODULE_HTTP);
 	if(module_https_loaded) sysModuleUnload(SYSMODULE_HTTPS);
-	if(module_net_loaded) sysModuleUnload(SYSMODULE_NET);
 	if(module_ssl_loaded) sysModuleUnload(SYSMODULE_SSL);
 	
 	if(uri_pool) free(uri_pool);
@@ -17681,28 +17662,19 @@ int upload(char *url, char *src, const char *method)
 	
 	u8 module_https_loaded=NO;
 	u8 module_http_loaded=NO;
-	u8 module_net_loaded=NO;
 	u8 module_ssl_loaded=NO;
 	
 	u8 https_init=NO;
 	u8 http_init=NO;
-	u8 net_init=NO;
 	u8 ssl_init=NO;
 
 	//init
-	ret = sysModuleLoad(SYSMODULE_NET);
+	ret = ftp_net_acquire();
 	if (ret < 0) {
-		print_load("Error : sysModuleLoad(SYSMODULE_NET) failed (%x)", ret);
+		print_load("Error : net init failed (%x)", ret);
 		ret=FAILED;
 		goto end;
-	} else module_net_loaded=YES;
-
-	ret = netInitialize();
-	if (ret < 0) {
-		print_load("Error : netInitialize failed (%x)", ret);
-		ret=FAILED;
-		goto end;
-	} else net_init=YES;
+	}
 
 	ret = sysModuleLoad(SYSMODULE_HTTP);
 	if (ret < 0) {
@@ -17916,11 +17888,10 @@ end:
 	if(https_init) httpsEnd();
 	if(ssl_init) sslEnd();
 	if(http_init) httpEnd();
-	if(net_init) netDeinitialize();
+	ftp_net_release();
 	
 	if(module_http_loaded) sysModuleUnload(SYSMODULE_HTTP);
 	if(module_https_loaded) sysModuleUnload(SYSMODULE_HTTPS);
-	if(module_net_loaded) sysModuleUnload(SYSMODULE_NET);
 	if(module_ssl_loaded) sysModuleUnload(SYSMODULE_SSL);
 	
 	if(uri_pool) free(uri_pool);
@@ -43509,6 +43480,7 @@ u8 Show_it(int pos)
 
 void MGZ_exit()
 {
+	ftpd_stop();
 	if( DEBUG ) start_loading();
 	FREE(ManaGunZ_path);
 	print_debug("end_PlugAndPlay");
@@ -43671,6 +43643,8 @@ int main(void)
 	
 	end_loading();
 	
+	ftp_init(); //启动内置 FTP 服务器（独立线程，不阻塞 UI）
+
 	start_Load_GAMEPIC();
 	
 	LoopBreak=1;
@@ -43714,7 +43688,6 @@ int main(void)
 		txt_viewer_input();
 		input_ICON0_creator();
 	}
-	ftp_init();
 	return 0;
 }
 
